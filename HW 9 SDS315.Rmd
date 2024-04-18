@@ -1,0 +1,145 @@
+---
+title: "Homework 9 SDS315"
+author: "Jade Lightfoot (jsl3652)"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+```{r echo=FALSE , message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(fig.height=6, fig.width=6, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=60))
+
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(kableExtra))
+turnout <- read.csv("/Users/jadelightfoot/Downloads/turnout.csv")
+solder <- read.csv("/Users/jadelightfoot/Downloads/solder.csv")
+library(MatchIt)
+library(tidyverse)
+library(ggplot2)
+library(mosaic)
+library(dplyr)
+```
+
+Github Repo: https://github.com/JadeLightfoot/Homework-9-SDS-315
+
+
+# **Problem 1- Get Out the Vote** #
+### **Part A**
+
+```{r echo=FALSE, results='hide'}
+# proportion of those recieving a GOTV and proportion of those not recieving a GOTV 
+voted_gotv<- sum(turnout$voted1998[turnout$GOTV_call == 1]) / sum(turnout$GOTV_call == 1)
+notvoted_gotv <- sum(turnout$voted1998[turnout$GOTV_call == 0]) / sum(turnout$GOTV_call == 0)
+
+prop(voted1998 ~ GOTV_call, data=turnout, success = 0)
+boot_voted1998 = do(1000)*lm(voted1998 ~ GOTV_call, data=resample(turnout))
+confint_voted1998<-confint(boot_voted1998, level = 0.95)
+print(confint_voted1998)
+```
+Based on the difference in proportions those who have received a GOTV call are around 20-25% more likely to have voted in 1998. 
+
+***
+
+### **Part B**
+
+```{r echo=FALSE}
+
+# Density plot for GOTV_call and AGE
+ggplot(turnout, aes(x = AGE, fill = factor(GOTV_call))) + geom_density(alpha = 0.5) + labs(title = "GOTV Call vs. Age", x = "Age", y = "Density")
+
+# Bar plot for GOTV_call and MAJORPTY
+ggplot(turnout, aes(x = factor(GOTV_call), fill = factor(MAJORPTY))) + geom_bar(position = "dodge") + labs(title = "GOTV Call vs. Major Party", x = "GOTV_call", y = "Count")
+
+```
+
+
+The graphs above take a treatment GOTV call and look at relationships between the treatment and a possible outcome to find correlation among the two. 
+```{r echo=FALSE}
+correlation_confound <- cor(turnout[, c("GOTV_call", "voted1996", "AGE", "MAJORPTY")])
+kable(correlation_confound, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F) 
+
+```
+
+The tables above shows the correlation between each variable and a confounder. If the correlation is close to 1 there is a strong positive correlation if it is close to -1 there is a strong negative correlation and if it is close to zero there is no correlation. Based on this fact none of the variables show a deep correlation to each other. This suggest the variables "GOTV_call", "voted1996", "AGE", "MAJORPTY" are not strong confounders that effect voting behavior in 1998. 
+
+***
+
+### **Part C**
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+# find matches
+turnout_match = matchit(GOTV_call ~ AGE + MAJORPTY + voted1996, data = turnout, ratio=5)
+
+# check balance
+# Check covariate balance
+summary(turnout_match)
+# extract the matched data and analyze
+turnout_matched = match.data(turnout_match)
+
+prop(voted1998 ~ GOTV_call, data=turnout_matched)
+prop.test(voted1998 ~ GOTV_call, data=turnout_matched)
+
+```
+
+```{r echo = FALSE}
+
+# get confidence intervals by bootstrapping
+boot_turnout = do(1000)*lm(voted1998 ~ GOTV_call, data=resample(turnout_matched))
+boot_turnout_confint<-confint(boot_turnout)
+kable(boot_turnout_confint, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F) 
+
+``` 
+
+
+
+By matching the data the overall effect of the GOTV call on the likelihood of voting in the 1998 election shows there is a difference in likelihood to voting. Which can suggest an effect on the treatment of an outcome, also suggesting a good balance between the treated and control groups with matching. 
+
+***
+
+
+# **Problem 2- Manufacturing flaws in circuit boards** #
+### **Part A**
+
+```{r echo= FALSE}
+ggplot(solder, aes(x = Solder, y = skips)) + geom_boxplot() + labs(title = "Relationship Between Solder Thickness and Number of Skips", x = "Solder Thickness (Thick, Thin)", y = "Number of Skips")
+
+```
+
+
+This graph shows two box plots between solder thickness (thick/thin) and the number of skips. Based on the graph above it is possible that there is an effect in solder thickness when it comes to manufacturing flaws for the circuit boards as the mean and range for manufacturing flaws is greatest for a thiner soldering thickness. 
+
+
+```{r echo= FALSE}
+# Plot for Opening vs. Skips
+ggplot(solder, aes(x = Opening, y = skips)) + geom_boxplot() + labs(title = "Relationship Between Opening Size and Number of Skips", x = "Opening Size (Small, Medium, Large)", y = "Number of Skips")
+
+
+```
+
+
+This graph shows multiple box plots and their relationship between the opening size of the solder gun and number of skips or manufacturing flaws. There is a common pattern that suggest every time the solder guns opening decreases in size the average number of skips and range grows. 
+
+### **Part B and C**
+```{r echo=FALSE, results='hide'}
+skipsmodel <- lm(skips ~ Opening + Solder + Opening:Solder, data = solder)
+coef(skipsmodel) %>%
+  round(0)
+```
+
+```{r echo=FALSE}
+boot_skips = do(1000)*lm(skips ~ Opening + Solder + Opening:Solder, data = resample(solder))
+conf_skips <- confint(boot_skips, level= 0.95)
+
+kable(conf_skips, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F) 
+
+```
+
+
+If the solder gun has a small opening and is thin the average skips are 10 skips more than one would expect and if the solder is thin with a medium opening the average skips are 1 skip less than one would expect. Then main effect for OpeningM is 2, the main effect for OpeningS is 5 and the main effect for SolderThin is 2. 
+
+### **Part D**
+
+If I were to recommend a combination of Opening size and Solder thickness to AT&T in order to minimize the number of skips in the manufacturing process I would recommend using a thick solder gun with a larger or medium opening. This is because when looking at the box plots and conducting a regression it is plausible that the number of skips are the lowest when using these certain techniques causing less manufacturing flaws.  
